@@ -6,7 +6,7 @@ import lombok.Getter;
 @Getter
 @AllArgsConstructor
 public enum TorrentsTags {
-    ANI_RSS("ani-rss"),
+    ANI_RSS("BT/Mikan/WebRip"),
     RENAME("RENAME"),
     BACK_RSS("备用RSS"),
     DOWNLOAD_COMPLETE("下载完成"),
