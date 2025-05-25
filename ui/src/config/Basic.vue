@@ -339,9 +339,19 @@
             </div>
           </el-form-item>
           <el-form-item label="GitHub加速">
-            <el-select v-model="props.config['github']" style="width: 150px;">
-              <el-option v-for="it in githubList" :key="it" :label="it" :value="it"/>
-            </el-select>
+            <div>
+              <div>
+                <el-select v-model="props.config['github']" style="width: 150px;">
+                  <el-option v-for="it in githubList" :key="it" :label="it" :value="it"/>
+                </el-select>
+              </div>
+              <div>
+                <el-checkbox v-model="props.config['customGithub']" label="自定义"/>
+              </div>
+              <div v-if="props.config['customGithub']">
+                <el-input v-model="props.config['customGithubUrl']" placeholder="https://xxxx.com"/>
+              </div>
+            </div>
           </el-form-item>
           <el-form-item label="DEBUG">
             <el-switch v-model:model-value="props.config.debug"/>
@@ -364,6 +374,17 @@
                 <span>分钟</span>
               </template>
             </el-input-number>
+          </el-form-item>
+          <el-form-item label="自动备份配置">
+            <div>
+              <el-switch v-model="props.config['configBackup']"/>
+              <br>
+              <el-input-number v-model="props.config['configBackupDay']" :min="1">
+                <template #suffix>
+                  <span>天</span>
+                </template>
+              </el-input-number>
+            </div>
           </el-form-item>
         </el-form>
       </el-collapse-item>

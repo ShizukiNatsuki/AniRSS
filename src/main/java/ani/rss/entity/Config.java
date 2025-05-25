@@ -314,6 +314,11 @@ public class Config implements Serializable {
     private String telegramChatId;
 
     /**
+     * telegram topic id
+     */
+    private Integer telegramTopicId;
+
+    /**
      * telegram Api Host
      */
     private String telegramApiHost;
@@ -639,6 +644,16 @@ public class Config implements Serializable {
     private String github;
 
     /**
+     * 自定义github加速
+     */
+    private Boolean customGithub;
+
+    /**
+     * 自定义github加速网址
+     */
+    private String customGithubUrl;
+
+    /**
      * github Token
      */
     private String githubToken;
@@ -667,4 +682,14 @@ public class Config implements Serializable {
      * tvshow.nfo
      */
     private Boolean tvShowNfo;
+
+    /**
+     * 设置备份
+     */
+    private Boolean configBackup;
+
+    /**
+     * 备份天数
+     */
+    private Integer configBackupDay;
 }
