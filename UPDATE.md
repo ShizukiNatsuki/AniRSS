@@ -1,3 +1,5 @@
 ### 改动
 
-- 修复点击订阅标题无法跳转bgm的问题
+- 修复windows中alist离线错误
+
+**So, Fuck your Windows**
