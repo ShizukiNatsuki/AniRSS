@@ -21,7 +21,7 @@
               </div>
               <div style="margin-top: 8px;">
                 <el-upload
-                    :action="`api/upload?s${authorization()}`"
+                    :action="`api/upload?s=${authorization()}`"
                     :before-upload="beforeAvatarUpload"
                     :on-success="res => {
                       ani['cover'] = res.data.data
@@ -56,9 +56,8 @@
   </el-dialog>
 </template>
 <script setup>
-
 import {ref} from "vue";
-import api from "../api.js";
+import api from "@/js/api.js";
 import {ElMessage} from "element-plus";
 import {UploadFilled} from "@element-plus/icons-vue";
 

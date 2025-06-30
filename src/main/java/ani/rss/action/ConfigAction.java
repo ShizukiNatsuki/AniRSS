@@ -8,7 +8,6 @@ import ani.rss.util.*;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.bean.copier.CopyOptions;
 import cn.hutool.core.util.ObjectUtil;
-import cn.hutool.core.util.ReUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.http.server.HttpServerRequest;
 import cn.hutool.http.server.HttpServerResponse;
@@ -46,31 +45,24 @@ public class ConfigAction implements BaseAction {
         Integer renameSleepSeconds = config.getRenameSleepSeconds();
         Integer sleep = config.getSleep();
         Integer gcSleep = config.getGcSleep();
-        String download = config.getDownload();
-        BeanUtil.copyProperties(
-                getBody(Config.class)
-                        .setExpirationTime(null)
-                        .setOutTradeNo(null)
-                        .setTryOut(null),
-                config,
-                CopyOptions
-                        .create()
-                        .setIgnoreNullValue(true)
-        );
-        String host = config.getHost();
-        if (StrUtil.isNotBlank(host)) {
-            if (host.endsWith("/")) {
-                host = host.substring(0, host.length() - 1);
-            }
-        }
-        if (StrUtil.isNotBlank(host)) {
-            if (!ReUtil.contains("http(s*)://", host)) {
-                host = "http://" + host;
-            }
-        }
-        config.setHost(host);
+        String download = config.getDownloadToolType();
 
-        Boolean proxy = ObjectUtil.defaultIfNull(config.getProxy(), false);
+        Config newConfig = getBody(Config.class);
+        newConfig.setExpirationTime(null)
+                .setOutTradeNo(null)
+                .setTryOut(null);
+
+        CopyOptions copyOptions = CopyOptions
+                .create()
+                .setIgnoreNullValue(true);
+
+        BeanUtil.copyProperties(
+                newConfig,
+                config,
+                copyOptions
+        );
+
+        Boolean proxy = config.getProxy();
         if (proxy) {
             String proxyHost = config.getProxyHost();
             Integer proxyPort = config.getProxyPort();
@@ -89,24 +81,6 @@ public class ConfigAction implements BaseAction {
             config.getLogin().setUsername(username);
         }
 
-        // 下载地址后面不要带 斜杠
-        String downloadPath = FilePathUtil.getAbsolutePath(config.getDownloadPath());
-        String ovaDownloadPath = FilePathUtil.getAbsolutePath(config.getOvaDownloadPath());
-        if (downloadPath.endsWith("/")) {
-            downloadPath = downloadPath.substring(0, downloadPath.length() - 1);
-        }
-        if (ovaDownloadPath.endsWith("/")) {
-            ovaDownloadPath = ovaDownloadPath.substring(0, ovaDownloadPath.length() - 1);
-        }
-        config.setDownloadPath(downloadPath)
-                .setOvaDownloadPath(ovaDownloadPath);
-
-        String telegramApiHost = config.getTelegramApiHost();
-        if (telegramApiHost.endsWith("/")) {
-            telegramApiHost = telegramApiHost.substring(0, telegramApiHost.length() - 1);
-        }
-        config.setTelegramApiHost(telegramApiHost);
-
         ConfigUtil.sync();
         Integer newRenameSleepSeconds = config.getRenameSleepSeconds();
         Integer newSleep = config.getSleep();
@@ -121,10 +95,11 @@ public class ConfigAction implements BaseAction {
             TaskUtil.restart();
         }
         // 下载工具发生改变
-        if (!download.equals(config.getDownload())) {
+        if (!download.equals(config.getDownloadToolType())) {
             TorrentUtil.load();
         }
 
         resultSuccessMsg("修改成功");
     }
+
 }

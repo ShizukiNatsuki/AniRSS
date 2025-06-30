@@ -1,6 +1,6 @@
 <template>
   <Items ref="items" :ani="props.ani"/>
-  <BackRss ref="backRss" :ani="props.ani"/>
+  <StandbyRss ref="standbyRss" :ani="props.ani"/>
   <Mikan ref="mikanRef" @add="args => {
     ani.subgroup = args.group
     ani.match = JSON.parse(args.match).map(s => `{{${args.group}}}:${s}`)
@@ -71,7 +71,7 @@
         </el-form-item>
         <el-form-item label="备用 RSS">
           <div style="display: flex;justify-content: end;width: 100%;">
-            <el-button text bg @click="backRss?.show" icon="EditPen">管理</el-button>
+            <el-button bg icon="EditPen" text @click="standbyRss?.show">管理</el-button>
           </div>
         </el-form-item>
         <el-form-item label="日期">
@@ -146,11 +146,26 @@
             </div>
           </div>
         </el-form-item>
+        <el-form-item label="重命名模版">
+          <div style="width: 100%">
+            <el-switch v-model="props.ani['customRenameTemplateEnable']"/>
+            <br>
+            <el-input v-model:model-value="props.ani['customRenameTemplate']"
+                      :disabled="!props.ani['customRenameTemplateEnable']"
+                      placeholder="${title} S${seasonFormat}E${episodeFormat}"/>
+            <br>
+            <el-text class="mx-1" size="small">
+              <a href="https://docs.wushuo.top/config/basic/rename#rename-template"
+                 target="_blank">详细说明</a>
+            </el-text>
+          </div>
+        </el-form-item>
         <el-form-item label="其它">
           <el-checkbox v-model="props.ani.omit" label="遗漏检测"/>
           <el-checkbox v-model="props.ani.upload" label="自动上传"/>
           <el-checkbox v-model="props.ani.downloadNew" label="只下载最新集"/>
           <el-checkbox v-model="props.ani['procrastinating']" label="摸鱼检测"/>
+          <el-checkbox v-model="props.ani['message']" label="通知"/>
         </el-form-item>
         <el-form-item label="启用">
           <el-switch v-model:model-value="props.ani.enable"/>
@@ -180,20 +195,20 @@
 
 <script setup>
 
-import Exclude from "../config/Exclude.vue";
+import Exclude from "@/config/Exclude.vue";
 import Items from "./Items.vue";
 import {onMounted, ref} from "vue";
-import api from "../api.js";
+import api from "@/js/api.js";
 import {ElMessage, ElText} from "element-plus";
-import Popconfirm from "../other/Popconfirm.vue";
-import BackRss from "./BackRss.vue";
+import Popconfirm from "@/other/Popconfirm.vue";
+import StandbyRss from "./StandbyRss.vue";
 import Mikan from "./Mikan.vue";
 import TmdbGroup from "./TmdbGroup.vue";
 
 const mikanRef = ref()
 const tmdbGroupRef = ref()
 
-let backRss = ref()
+let standbyRss = ref()
 let date = ref()
 
 let items = ref()

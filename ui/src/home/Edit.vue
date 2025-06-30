@@ -2,10 +2,9 @@
   <el-dialog v-model="downloadPathDialogVisible" align-center center width="300"
              @close="callback">
     <div>
-      <el-text class="mx-1" size="default">
+      <strong>
         检测到修改后的下载位置发生了改动，是否将已下载文件移动到新的位置？
-      </el-text>
-      <br>
+      </strong>
       <br>
       <el-text class="mx-1" size="small">
         {{ downloadPath }}
@@ -35,26 +34,15 @@
 
 import {ref} from "vue";
 import {ElMessage, ElMessageBox} from "element-plus";
-import api from "../api.js";
+import api from "@/js/api.js";
 import Ani from "./Ani.vue";
+import {aniData} from "@/js/ani.js";
 
 
 const dialogVisible = ref(false)
 const downloadPathDialogVisible = ref(false)
 
-const ani = ref({
-  'url': '',
-  'season': 1,
-  'offset': 0,
-  'title': '',
-  'themoviedbName': '',
-  'exclude': [],
-  'enable': true,
-  'ova': false,
-  'totalEpisodeNumber': '',
-  'customDownloadPath': false,
-  'downloadPath': ''
-})
+const ani = ref(aniData)
 
 let move = ref(false)
 let downloadPath = ref('')
@@ -91,7 +79,9 @@ const editAni = () => {
       '警告',
       {
         confirmButtonText: '执意继续移动',
+        confirmButtonClass: 'is-text is-has-bg el-button--danger',
         cancelButtonText: '取消',
+        cancelButtonClass: 'is-text is-has-bg',
         type: 'warning',
       }
   )

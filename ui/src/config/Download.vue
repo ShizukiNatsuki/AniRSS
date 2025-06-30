@@ -5,7 +5,7 @@
                     event.preventDefault()
                    }">
     <el-form-item label="下载工具">
-      <el-select v-model:model-value="props.config.download">
+      <el-select v-model:model-value="props.config.downloadToolType">
         <el-option v-for="item in downloadSelect"
                    :key="item"
                    :label="item"
@@ -13,10 +13,10 @@
       </el-select>
     </el-form-item>
     <el-form-item label="地址">
-      <el-input v-model:model-value="props.config.host" placeholder="http://192.168.1.x:8080"/>
+      <el-input v-model:model-value="props.config.downloadToolHost" placeholder="http://192.168.1.x:8080"/>
     </el-form-item>
-    <el-form-item v-if="props.config.download === 'Aria2'" label="RPC 密钥">
-      <el-input v-model:model-value="props.config.password" placeholder="" show-password>
+    <el-form-item v-if="props.config.downloadToolType === 'Aria2'" label="RPC 密钥">
+      <el-input v-model:model-value="props.config.downloadToolPassword" placeholder="" show-password>
         <template #prefix>
           <el-icon class="el-input__icon">
             <Key/>
@@ -24,9 +24,9 @@
         </template>
       </el-input>
     </el-form-item>
-    <template v-else-if="props.config.download === 'Alist'">
+    <template v-else-if="props.config.downloadToolType === 'Alist'">
       <el-form-item label="AlistToken">
-        <el-input v-model:model-value="props.config.password" placeholder="alist-xxxxxx" show-password>
+        <el-input v-model:model-value="props.config.downloadToolPassword" placeholder="alist-xxxxxx" show-password>
           <template #prefix>
             <el-icon class="el-input__icon">
               <Key/>
@@ -40,6 +40,20 @@
           支持离线下载到 115、PikPak、迅雷云盘
         </el-text>
       </el-form-item>
+      <el-form-item label="Driver">
+        <el-select v-model="props.config['provider']" style="width: 150px;">
+          <el-option v-for="it in ['115 Cloud', 'Thunder', 'PikPak']" :key="it" :label="it" :value="it"/>
+        </el-select>
+      </el-form-item>
+      <el-form-item label="重试次数">
+        <div>
+          <el-input-number v-model="props.config['alistDownloadRetryNumber']" :min="-1"/>
+          <br>
+          <el-text class="mx-1" size="small">
+            设置为 -1 将一直进行重试
+          </el-text>
+        </div>
+      </el-form-item>
       <el-form-item label="离线超时">
         <el-input-number v-model:model-value="props.config['alistDownloadTimeout']" :min="1">
           <template #suffix>
@@ -50,7 +64,7 @@
     </template>
     <template v-else>
       <el-form-item label="用户名">
-        <el-input v-model:model-value="props.config.username" placeholder="username">
+        <el-input v-model:model-value="props.config.downloadToolUsername" placeholder="username">
           <template #prefix>
             <el-icon class="el-input__icon">
               <User/>
@@ -59,7 +73,7 @@
         </el-input>
       </el-form-item>
       <el-form-item label="密码">
-        <el-input v-model:model-value="props.config.password" placeholder="password" show-password>
+        <el-input v-model:model-value="props.config.downloadToolPassword" placeholder="password" show-password>
           <template #prefix>
             <el-icon class="el-input__icon">
               <Key/>
@@ -75,10 +89,36 @@
       </div>
     </el-form-item>
     <el-form-item label="保存位置">
-      <el-input v-model:model-value="props.config.downloadPath" placeholder="/Media/番剧"></el-input>
+      <div style="width: 100%;">
+        <el-input v-model:model-value="props.config['downloadPathTemplate']"/>
+        <el-alert
+            v-if="!testPathTemplate(props.config['downloadPathTemplate'])"
+            style="margin-top: 8px;"
+            type="warning"
+            show-icon
+            :closable="false"
+        >
+          <template #title>
+            你的 保存位置 并未按照模版填写, 可能会遇到下载位置错误
+          </template>
+        </el-alert>
+      </div>
     </el-form-item>
     <el-form-item label="剧场版保存位置">
-      <el-input v-model:model-value="props.config.ovaDownloadPath" placeholder="/Media/剧场版"></el-input>
+      <div style="width: 100%;">
+        <el-input v-model:model-value="props.config['ovaDownloadPathTemplate']"/>
+        <el-alert
+            v-if="!testPathTemplate(props.config['ovaDownloadPathTemplate'])"
+            style="margin-top: 8px;"
+            type="warning"
+            show-icon
+            :closable="false"
+        >
+          <template #title>
+            你的 剧场版保存位置 并未按照模版填写, 可能会遇到下载位置错误
+          </template>
+        </el-alert>
+      </div>
     </el-form-item>
     <el-form-item label="自动删除">
       <div>
@@ -94,7 +134,7 @@
                      :disabled="!props.config.delete"
                      label="等待做种完毕"/>
         <br>
-        <el-checkbox v-model:model-value="props.config.deleteBackRSSOnly"
+        <el-checkbox v-model:model-value="props.config.deleteStandbyRSSOnly"
                      :disabled="!props.config.delete"
                      label="仅在主RSS更新后删除备用RSS"/>
         <br>
@@ -108,43 +148,6 @@
         <br>
         <el-text class="mx-1" size="small">
           删除本地文件, 仅在同时开启了 <strong>alist上传</strong> 并上传成功后删除
-        </el-text>
-      </div>
-    </el-form-item>
-    <el-form-item label="拼音首字母">
-      <div>
-        <el-switch v-model:model-value="props.config.acronym"
-                   :disabled="props.config.quarter || props.config['yearStorage']"/>
-        <br>
-        <el-text class="mx-1" size="small">
-          存放到 #,0,A-Z 文件夹下
-        </el-text>
-      </div>
-    </el-form-item>
-    <el-form-item label="年份">
-      <div>
-        <el-switch v-model:model-value="props.config['yearStorage']"
-                   :disabled="props.config.acronym || props.config.quarter"/>
-        <br>
-        <el-text class="mx-1" size="small">
-          按年份存放, 如 2023、2024、2025
-        </el-text>
-      </div>
-    </el-form-item>
-    <el-form-item label="季度">
-      <div>
-        <el-switch v-model:model-value="props.config.quarter"
-                   :disabled="props.config.acronym || props.config['yearStorage']"/>
-        <br>
-        <el-text class="mx-1" size="small">
-          按季度月份存放, 如 2024-07
-        </el-text>
-        <br/>
-        <div>
-          <el-checkbox v-model="props.config['quarterMerge']" :disabled="!props.config.quarter" label="季度合并"/>
-        </div>
-        <el-text class="mx-1" size="small">
-          将 2024-1、2024-2、2024-3 合并为 2024-1
         </el-text>
       </div>
     </el-form-item>
@@ -169,131 +172,24 @@
     <el-form-item label="检测是否死种">
       <el-switch v-model:model-value="props.config.watchErrorTorrent"/>
     </el-form-item>
-    <el-collapse>
-      <el-collapse-item title="qBittorrent 设置">
-        <el-form-item label="下载速度限制">
-          <el-input-number v-model:model-value="props.config['dlLimit']" :min="0">
-            <template #suffix>
-              <span>kiB/s</span>
-            </template>
-          </el-input-number>
-        </el-form-item>
-        <el-form-item label="上传速度限制">
-          <el-input-number v-model:model-value="props.config['upLimit']" :min="0">
-            <template #suffix>
-              <span>kiB/s</span>
-            </template>
-          </el-input-number>
-        </el-form-item>
-        <el-form-item label="分享率">
-          <div>
-            <el-input-number v-model:model-value="props.config.ratioLimit" :min="-2"/>
-            <br>
-            <el-text class="mx-1" size="small">
-              "-1"表示禁用, "-2"使用全局设置
-            </el-text>
-          </div>
-        </el-form-item>
-        <el-form-item label="总做种时长">
-          <div>
-            <el-input-number v-model:model-value="props.config.seedingTimeLimit" :min="-2">
-              <template #suffix>
-                <span>分钟</span>
-              </template>
-            </el-input-number>
-            <br>
-            <el-text class="mx-1" size="small">
-              "-1"表示禁用, "-2"使用全局设置
-            </el-text>
-          </div>
-        </el-form-item>
-        <el-form-item label="非活跃时长">
-          <div>
-            <el-input-number v-model:model-value="props.config.inactiveSeedingTimeLimit" :min="-2">
-              <template #suffix>
-                <span>分钟</span>
-              </template>
-            </el-input-number>
-            <br>
-            <el-text class="mx-1" size="small">
-              "-1"表示禁用, "-2"使用全局设置
-            </el-text>
-          </div>
-        </el-form-item>
-        <el-form-item label="qb保存路径">
-          <div>
-            <el-switch v-model:model-value="props.config.qbUseDownloadPath"
-                       :disabled="config.download !== 'qBittorrent'"/>
-            <br>
-            <el-text class="mx-1" size="small">
-              开启后将使用qBittorrent的临时下载位置 (最终下载位置不受影响)
-            </el-text>
-          </div>
-        </el-form-item>
+    <el-collapse v-model="activeName">
+      <el-collapse-item name="qb" title="qBittorrent 设置">
+        <q-bittorrent v-if="activeName.indexOf('qb') > -1" :config="props.config"/>
       </el-collapse-item>
-      <el-collapse-item title="Alist 设置">
-        <el-form-item label="AlistHost">
-          <el-input v-model:model-value="props.config['alistHost']" placeholder="http://127.0.0.1:5244"/>
-        </el-form-item>
-        <el-form-item label="AlistToken">
-          <el-input v-model:model-value="props.config['alistToken']" placeholder="alist-xxxxxx"/>
-        </el-form-item>
-        <el-form-item label="上传位置">
-          <el-input v-model:model-value="props.config['alistPath']" placeholder="/"/>
-        </el-form-item>
-        <el-form-item label="剧场版上传位置">
-          <el-input v-model:model-value="props.config['alistOvaPath']" placeholder="/"/>
-        </el-form-item>
-        <el-form-item label="失败重试次数">
-          <el-input-number v-model:model-value="props.config['alistRetry']" :max="100" :min="1"/>
-        </el-form-item>
-        <el-form-item label="上传开关">
-          <div style="width: 100%">
-            <div>
-              <el-switch v-model="props.config['alist']"/>
-            </div>
-            <div>
-              <el-checkbox v-model="props.config['alistTask']" :disabled="!props.config['alist']" label="添加为任务"/>
-            </div>
-            <div>
-              <el-text class="mx-1" size="small">
-                自动将下载完成的文件上传至 alist
-              </el-text>
-            </div>
-          </div>
-        </el-form-item>
-        <el-form-item label="刷新开关">
-          <div style="width: 100%">
-            <div>
-              <el-switch v-model:model-value="props.config['alistRefresh']"/>
-            </div>
-            <div>
-              <el-text class="mx-1" size="small">
-                刷新 alist 上传路径的文件列表
-              </el-text>
-            </div>
-          </div>
-        </el-form-item>
-        <el-form-item label="刷新延迟">
-          <el-input-number v-model="props.config['alistRefreshDelayed']" :min="0">
-            <template #suffix>
-              <span>秒</span>
-            </template>
-          </el-input-number>
-        </el-form-item>
+      <el-collapse-item name="alist" title="Alist 设置">
+        <alist v-if="activeName.indexOf('alist') > -1" :config="props.config"/>
       </el-collapse-item>
     </el-collapse>
-
   </el-form>
 </template>
 
 <script setup>
-
-
 import {ref} from "vue";
-import api from "../api.js";
+import api from "@/js/api.js";
 import {ElMessage} from "element-plus";
 import {Key, User} from "@element-plus/icons-vue";
+import QBittorrent from "@/config/download/qBittorrent.vue";
+import Alist from "@/config/download/Alist.vue";
 
 const downloadSelect = ref([
   'qBittorrent',
@@ -304,9 +200,6 @@ const downloadSelect = ref([
 
 const downloadLoginTestLoading = ref(false)
 const downloadLoginTest = () => {
-  if (props.config.host.endsWith("/")) {
-    props.config.host = props.config.host.substring(0, props.config.host.length - 1);
-  }
   downloadLoginTestLoading.value = true
   api.post("api/downloadLoginTestLoading", props.config)
       .then(res => {
@@ -316,6 +209,12 @@ const downloadLoginTest = () => {
         downloadLoginTestLoading.value = false
       })
 }
+
+let testPathTemplate = (path) => {
+  return new RegExp('\\$\{[A-z]+\}').test(path);
+}
+
+let activeName = ref([])
 
 let props = defineProps(['config'])
 </script>

@@ -3,12 +3,13 @@ package ani.rss.util;
 import ani.rss.action.ClearCacheAction;
 import ani.rss.download.BaseDownload;
 import ani.rss.entity.*;
-import ani.rss.enums.MessageEnum;
+import ani.rss.enums.NotificationStatusEnum;
 import ani.rss.enums.StringEnum;
 import ani.rss.enums.TorrentsTags;
 import cn.hutool.core.date.DateField;
 import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.io.FileUtil;
+import cn.hutool.core.lang.func.Func1;
 import cn.hutool.core.text.StrFormatter;
 import cn.hutool.core.thread.ThreadUtil;
 import cn.hutool.core.util.*;
@@ -26,7 +27,6 @@ import org.w3c.dom.NodeList;
 import java.io.File;
 import java.util.*;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @Slf4j
 public class TorrentUtil {
@@ -47,7 +47,7 @@ public class TorrentUtil {
         Boolean autoDisabled = config.getAutoDisabled();
         Integer downloadCount = config.getDownloadCount();
         Integer delayedDownload = config.getDelayedDownload();
-        Boolean deleteBackRSSOnly = config.getDeleteBackRSSOnly();
+        Boolean deleteStandbyRSSOnly = config.getDeleteStandbyRSSOnly();
 
         String title = ani.getTitle();
         Integer season = ani.getSeason();
@@ -80,13 +80,15 @@ public class TorrentUtil {
                 })
                 .count();
 
-        List<File> downloadPathList = getDownloadPath(ani);
+        File downloadPathList = getDownloadPath(ani);
         String savePath = FilePathUtil.getAbsolutePath(
                 downloadPathList
-                        .get(0)
         );
 
         ItemsUtil.procrastinating(ani, items);
+
+        // 实时保存文件
+        boolean sync = false;
 
         for (Item item : items) {
             log.debug(JSONUtil.formatJsonStr(GsonStatic.toJson(item)));
@@ -152,8 +154,8 @@ public class TorrentUtil {
             }
 
             // 仅在主RSS更新后删除备用RSS
-            if (delete && master && deleteBackRSSOnly) {
-                TorrentsInfo backRSS = torrentsInfos
+            if (delete && master && deleteStandbyRSSOnly) {
+                TorrentsInfo standbyRSS = torrentsInfos
                         .stream()
                         .filter(torrentsInfo -> {
                             if (!torrentsInfo.getDownloadDir().equals(savePath)) {
@@ -172,18 +174,18 @@ public class TorrentUtil {
                         .findFirst()
                         .orElse(null);
 
-                if (Objects.nonNull(backRSS)) {
-                    List<String> tags = backRSS.getTags();
+                if (Objects.nonNull(standbyRSS)) {
+                    List<String> tags = standbyRSS.getTags();
                     if (!tags.contains(TorrentsTags.RENAME.getValue())) {
                         // 未完成重命名
                         continue;
                     }
-                    if (!delete(backRSS)) {
-                        log.debug("备用RSS可能还未做种完成 {}", backRSS.getName());
+                    if (!delete(standbyRSS)) {
+                        log.debug("备用RSS可能还未做种完成 {}", standbyRSS.getName());
                         // 删除失败或者不允许删除
                         continue;
                     }
-                    torrentsInfos.remove(backRSS);
+                    torrentsInfos.remove(standbyRSS);
                 }
             }
 
@@ -224,22 +226,28 @@ public class TorrentUtil {
                 continue;
             }
 
-            deleteBackRss(ani, item);
+            deleteStandbyRss(ani, item);
 
             if (!AniUtil.ANI_LIST.contains(ani)) {
                 return;
             }
+
+            sync = true;
+
             download(ani, item, savePath, saveTorrent);
+
             if (master && !is5) {
                 currentDownloadCount++;
             }
             count++;
         }
 
-        int size = ItemsUtil.currentEpisodeNumber(ani, items);
-        if (size > 0 && ani.getCurrentEpisodeNumber() != size) {
-            // 当前集数发生变动
+        if (sync) {
+            int size = ItemsUtil.currentEpisodeNumber(ani, items);
+            // 更新当前集数
             ani.setCurrentEpisodeNumber(size);
+            // 更新下载时间
+            ani.setLastDownloadTime(System.currentTimeMillis());
             AniUtil.sync();
         }
 
@@ -251,9 +259,9 @@ public class TorrentUtil {
             return;
         }
         if (currentDownloadCount >= totalEpisodeNumber) {
-            ani.setEnable(false);
             log.info("{} 第 {} 季 共 {} 集 已全部下载完成, 自动停止订阅", title, season, totalEpisodeNumber);
-            MessageUtil.send(config, ani, StrFormatter.format("{} 订阅已完结", title), MessageEnum.COMPLETED);
+            NotificationUtil.send(config, ani, StrFormatter.format("{} 订阅已完结", title), NotificationStatusEnum.COMPLETED);
+            ani.setEnable(false);
             AniUtil.sync();
         }
     }
@@ -264,9 +272,9 @@ public class TorrentUtil {
      * @param ani
      * @param item
      */
-    public static void deleteBackRss(Ani ani, Item item) {
+    public static void deleteStandbyRss(Ani ani, Item item) {
         Config config = ConfigUtil.CONFIG;
-        Boolean backRss = config.getBackRss();
+        Boolean standbyRss = config.getStandbyRss();
         Boolean coexist = config.getCoexist();
         Boolean delete = config.getDelete();
         String reName = item.getReName();
@@ -275,7 +283,7 @@ public class TorrentUtil {
             return;
         }
 
-        if (!backRss) {
+        if (!standbyRss) {
             return;
         }
 
@@ -289,36 +297,30 @@ public class TorrentUtil {
         }
         reName = ReUtil.get(StringEnum.SEASON_REG, reName, 0);
 
-        List<File> downloadPathList = getDownloadPath(ani);
+        File downloadPath = getDownloadPath(ani);
 
         List<TorrentsInfo> torrentsInfos = getTorrentsInfos();
 
-        for (File file : downloadPathList) {
-            String finalReName = reName;
-            TorrentsInfo backRSS = torrentsInfos
-                    .stream()
-                    .filter(torrentsInfo -> {
-                        if (!torrentsInfo.getDownloadDir().equals(FilePathUtil.getAbsolutePath(file))) {
-                            return false;
-                        }
-                        if (!ReUtil.contains(StringEnum.SEASON_REG, torrentsInfo.getName())) {
-                            return false;
-                        }
-                        String s = ReUtil.get(StringEnum.SEASON_REG, torrentsInfo.getName(), 0);
-                        return s.equals(finalReName);
-                    })
-                    .findFirst()
-                    .orElse(null);
-            if (Objects.nonNull(backRSS)) {
-                TorrentUtil.delete(backRSS, true, true);
-            }
+        String finalReName = reName;
+        TorrentsInfo standbyRSS = torrentsInfos
+                .stream()
+                .filter(torrentsInfo -> {
+                    if (!torrentsInfo.getDownloadDir().equals(FilePathUtil.getAbsolutePath(downloadPath))) {
+                        return false;
+                    }
+                    if (!ReUtil.contains(StringEnum.SEASON_REG, torrentsInfo.getName())) {
+                        return false;
+                    }
+                    String s = ReUtil.get(StringEnum.SEASON_REG, torrentsInfo.getName(), 0);
+                    return s.equals(finalReName);
+                })
+                .findFirst()
+                .orElse(null);
+        if (Objects.nonNull(standbyRSS)) {
+            TorrentUtil.delete(standbyRSS, true, true);
         }
 
-        List<File> files = downloadPathList.stream()
-                .filter(File::exists)
-                .filter(File::isDirectory)
-                .flatMap(downloadPath -> Stream.of(ObjectUtil.defaultIfNull(downloadPath.listFiles(), new File[]{})))
-                .toList();
+        File[] files = ObjectUtil.defaultIfNull(downloadPath.listFiles(), new File[]{});
 
         for (File file : files) {
             String fileMainName = FileUtil.mainName(file);
@@ -467,9 +469,9 @@ public class TorrentUtil {
             return false;
         }
 
-        String downloadPath = FilePathUtil.getAbsolutePath(config.getDownloadPath());
+        String downloadPathTemplate = config.getDownloadPathTemplate();
 
-        if (StrUtil.isBlank(downloadPath)) {
+        if (StrUtil.isBlank(downloadPathTemplate)) {
             return false;
         }
 
@@ -495,15 +497,9 @@ public class TorrentUtil {
             }
         }
 
-        List<File> files = getDownloadPath(ani)
-                .stream()
-                .flatMap(file -> {
-                    if (ova) {
-                        return FileUtil.loopFiles(file).stream();
-                    }
-                    return Stream.of(ObjectUtil.defaultIfNull(file.listFiles(), new File[]{}));
-                })
-                .toList();
+        File downloadPath = getDownloadPath(ani);
+
+        List<File> files = List.of(ObjectUtil.defaultIfNull(downloadPath.listFiles(), new File[]{}));
 
         if (files.stream()
                 .filter(file -> {
@@ -554,116 +550,96 @@ public class TorrentUtil {
      * @param ani
      * @return
      */
-    public static List<File> getDownloadPath(Ani ani) {
+    public static File getDownloadPath(Ani ani) {
+        return getDownloadPath(ani, ConfigUtil.CONFIG);
+    }
+
+    /**
+     * 获取下载位置
+     *
+     * @param ani
+     * @return
+     */
+    public static File getDownloadPath(Ani ani, Config config) {
         Boolean customDownloadPath = ani.getCustomDownloadPath();
         String aniDownloadPath = ani.getDownloadPath();
+        Boolean ova = ani.getOva();
+
+        String downloadPathTemplate = config.getDownloadPathTemplate();
+        String ovaDownloadPathTemplate = config.getOvaDownloadPathTemplate();
+        if (ova && StrUtil.isNotBlank(ovaDownloadPathTemplate)) {
+            // 剧场版位置
+            downloadPathTemplate = ovaDownloadPathTemplate;
+        }
 
         if (customDownloadPath && StrUtil.isNotBlank(aniDownloadPath)) {
-            List<File> files = StrUtil.split(aniDownloadPath, "\n", true, true)
+            // 自定义下载位置
+            downloadPathTemplate = StrUtil.split(aniDownloadPath, "\n", true, true)
                     .stream()
-                    .map(File::new)
-                    .toList();
-            if (!files.isEmpty()) {
-                return files;
-            }
+                    .map(FilePathUtil::getAbsolutePath)
+                    .findFirst()
+                    .orElse(downloadPathTemplate);
         }
 
         String title = ani.getTitle().trim();
-        Integer season = ani.getSeason();
-        Boolean ova = ani.getOva();
 
-        Config config = ConfigUtil.CONFIG;
-        String downloadPath = FilePathUtil.getAbsolutePath(config.getDownloadPath());
-        String ovaDownloadPath = FilePathUtil.getAbsolutePath(config.getOvaDownloadPath());
-        // 按拼音首字母存放
-        Boolean acronym = config.getAcronym();
-        // 根据季度存放
-        Boolean quarter = config.getQuarter();
-        Boolean quarterMerge = config.getQuarterMerge();
-        // 按照年份存放
-        Boolean yearStorage = config.getYearStorage();
-        Boolean fileExist = config.getFileExist();
-        if (ova && StrUtil.isNotBlank(ovaDownloadPath)) {
-            downloadPath = ovaDownloadPath;
-        }
-        if (acronym) {
-            String pinyin = PinyinUtil.getPinyin(title);
-            String s = pinyin.substring(0, 1).toUpperCase();
-            if (ReUtil.isMatch("^\\d$", s)) {
-                s = "0";
-            } else if (!ReUtil.isMatch("^[a-zA-Z]$", s)) {
-                s = "#";
-            }
-            downloadPath += "/" + s;
-        } else if (quarter) {
-            Integer year = ani.getYear();
-            Integer month = ani.getMonth();
-            if (quarterMerge) {
-                if (List.of(1, 2, 3).contains(month)) {
-                    month = 1;
-                } else if (List.of(4, 5, 6).contains(month)) {
-                    month = 4;
-                } else if (List.of(7, 8, 9).contains(month)) {
-                    month = 7;
-                } else {
-                    month = 10;
-                }
-            }
-            downloadPath = StrFormatter.format("{}/{}-{}", downloadPath, year, String.format("%02d", month));
-        } else if (yearStorage) {
-            Integer year = ani.getYear();
-            downloadPath = StrFormatter.format("{}/{}", downloadPath, year);
-        }
-        if (ova) {
-            return List.of(new File(downloadPath + "/" + title));
+        String pinyin = PinyinUtil.getPinyin(title);
+        String letter = pinyin.substring(0, 1).toUpperCase();
+        if (ReUtil.isMatch("^\\d$", letter)) {
+            letter = "0";
+        } else if (!ReUtil.isMatch("^[a-zA-Z]$", letter)) {
+            letter = "#";
         }
 
-        String seasonFileName = "";
-        String seasonName = config.getSeasonName();
-        if ("Season 1".equals(seasonName)) {
-            seasonFileName = StrFormatter.format("Season {}", season);
+        downloadPathTemplate = downloadPathTemplate.replace("${letter}", letter);
+
+        int year = ani.getYear();
+        int month = ani.getMonth();
+        String monthFormat = String.format("%02d", month);
+        int quarter;
+        String quarterName;
+        if (List.of(1, 2, 3).contains(month)) {
+            quarter = 1;
+            quarterName = "冬";
+        } else if (List.of(4, 5, 6).contains(month)) {
+            quarter = 4;
+            quarterName = "春";
+        } else if (List.of(7, 8, 9).contains(month)) {
+            quarter = 7;
+            quarterName = "夏";
+        } else {
+            quarter = 10;
+            quarterName = "秋";
         }
-        if ("Season 01".equals(seasonName)) {
-            seasonFileName = StrFormatter.format("Season {}", String.format("%02d", season));
-        }
-        if ("S1".equals(seasonName)) {
-            seasonFileName = StrFormatter.format("S{}", season);
-        }
-        if ("S01".equals(seasonName)) {
-            seasonFileName = StrFormatter.format("S{}", String.format("%02d", season));
+        String quarterFormat = String.format("%02d", quarter);
+
+        downloadPathTemplate = downloadPathTemplate.replace("${year}", String.valueOf(year));
+        downloadPathTemplate = downloadPathTemplate.replace("${month}", String.valueOf(month));
+        downloadPathTemplate = downloadPathTemplate.replace("${monthFormat}", monthFormat);
+        downloadPathTemplate = downloadPathTemplate.replace("${quarter}", String.valueOf(quarter));
+        downloadPathTemplate = downloadPathTemplate.replace("${quarterFormat}", quarterFormat);
+        downloadPathTemplate = downloadPathTemplate.replace("${quarterName}", quarterName);
+
+        int season = ani.getSeason();
+        String seasonFormat = String.format("%02d", season);
+
+        downloadPathTemplate = downloadPathTemplate.replace("${season}", String.valueOf(season));
+        downloadPathTemplate = downloadPathTemplate.replace("${seasonFormat}", seasonFormat);
+
+        List<Func1<Ani, Object>> list = List.of(
+                Ani::getTitle,
+                Ani::getThemoviedbName,
+                Ani::getSubgroup
+        );
+
+        downloadPathTemplate = RenameUtil.replaceField(downloadPathTemplate, ani, list);
+
+        if (downloadPathTemplate.contains("${jpTitle}")) {
+            String jpTitle = RenameUtil.getJpTitle(ani);
+            downloadPathTemplate = downloadPathTemplate.replace("${jpTitle}", jpTitle);
         }
 
-        File file = new File(StrFormatter.format("{}/{}/{}", downloadPath, title, seasonFileName));
-        List<File> files = new ArrayList<>();
-        if (!fileExist) {
-            files.add(file);
-            return files;
-        }
-        File aniFile = new File(downloadPath + "/" + title);
-        if (!aniFile.exists()) {
-            files.add(file);
-            return files;
-        }
-
-        File[] seasonFiles = ObjectUtil.defaultIfNull(aniFile.listFiles(), new File[]{});
-        for (File seasonFile : seasonFiles) {
-            if (seasonFile.isFile()) {
-                continue;
-            }
-            String name = seasonFile.getName();
-            String regStr = "([Ss]eason|[Ss]) ?(\\d+)";
-            if (!ReUtil.contains(regStr, name)) {
-                continue;
-            }
-            String s = ReUtil.get(regStr, name, 2);
-            Integer sInt = Integer.parseInt(s);
-            if (!NumberUtil.equals(sInt, season)) {
-                continue;
-            }
-            files.add(seasonFile);
-        }
-        files.add(file);
-        return files;
+        return new File(downloadPathTemplate);
     }
 
     /**
@@ -674,7 +650,7 @@ public class TorrentUtil {
     public static synchronized Boolean login() {
         ThreadUtil.sleep(1000);
         Config config = ConfigUtil.CONFIG;
-        String downloadPath = config.getDownloadPath();
+        String downloadPath = config.getDownloadPathTemplate();
         if (StrUtil.isBlank(downloadPath)) {
             log.warn("下载位置未设置");
             return false;
@@ -717,7 +693,7 @@ public class TorrentUtil {
         if (!master) {
             text = StrFormatter.format("(备用RSS) {}", text);
         }
-        MessageUtil.send(ConfigUtil.CONFIG, ani, text, MessageEnum.DOWNLOAD_START);
+        NotificationUtil.send(ConfigUtil.CONFIG, ani, text, NotificationStatusEnum.DOWNLOAD_START);
 
         try {
             createTvShowNfo(savePath, ani);
@@ -740,9 +716,9 @@ public class TorrentUtil {
             log.error("{} 下载失败将进行重试, 当前重试次数为{}次", name, i);
         }
         log.error("{} 添加失败，疑似为坏种", name);
-        MessageUtil.send(ConfigUtil.CONFIG, ani,
+        NotificationUtil.send(ConfigUtil.CONFIG, ani,
                 StrFormatter.format("{} 添加失败，疑似为坏种", name),
-                MessageEnum.ERROR);
+                NotificationStatusEnum.ERROR);
     }
 
     /**
@@ -768,11 +744,6 @@ public class TorrentUtil {
         String tmdbId = tmdb.getId();
 
         if (StrUtil.isBlank(tmdbId)) {
-            return;
-        }
-        String seasonName = config.getSeasonName();
-
-        if (seasonName.equals("None")) {
             return;
         }
 
@@ -885,7 +856,7 @@ public class TorrentUtil {
             log.error(e.getMessage(), e);
         }
         try {
-            AlistUtil.refresh(torrentsInfo, ani);
+            AlistUtil.refresh(ani);
         } catch (Exception e) {
             log.error(e.getMessage(), e);
         }
@@ -893,7 +864,20 @@ public class TorrentUtil {
         if (tags.contains(TorrentsTags.BACK_RSS.getValue())) {
             text = StrFormatter.format("(备用RSS) {}", text);
         }
-        MessageUtil.send(ConfigUtil.CONFIG, ani, text, MessageEnum.DOWNLOAD_END);
+        NotificationUtil.send(ConfigUtil.CONFIG, ani, text, NotificationStatusEnum.DOWNLOAD_END);
+
+        if (Objects.isNull(ani)) {
+            return;
+        }
+
+        String title = ani.getTitle();
+
+        try {
+            AniUtil.completed(ani);
+        } catch (Exception e) {
+            log.error("番剧完结迁移失败 {}", title);
+            log.error(e.getMessage(), e);
+        }
     }
 
     /**
@@ -907,7 +891,7 @@ public class TorrentUtil {
         return AniUtil.ANI_LIST
                 .stream()
                 .filter(ani -> {
-                    String path = FilePathUtil.getAbsolutePath(TorrentUtil.getDownloadPath(ani).get(0));
+                    String path = FilePathUtil.getAbsolutePath(TorrentUtil.getDownloadPath(ani));
                     return path.equals(downloadDir);
                 })
                 .map(ObjectUtil::clone)
@@ -1036,12 +1020,20 @@ public class TorrentUtil {
         if (StrUtil.isBlank(tags)) {
             return false;
         }
+        String name = torrentsInfo.getName();
+        log.debug("添加标签 {} {}", name, tags);
+        boolean b = false;
         try {
-            return baseDownload.addTags(torrentsInfo, tags);
+            b = baseDownload.addTags(torrentsInfo, tags);
         } catch (Exception e) {
             log.error(e.getMessage(), e);
         }
-        return false;
+        if (b) {
+            log.debug("添加标签成功 {} {}", name, tags);
+        } else {
+            log.error("添加标签失败 {} {}", name, tags);
+        }
+        return b;
     }
 
 
@@ -1065,7 +1057,7 @@ public class TorrentUtil {
 
     public static synchronized void load() {
         Config config = ConfigUtil.CONFIG;
-        String download = config.getDownload();
+        String download = config.getDownloadToolType();
         ClassUtil.scanPackage("ani.rss.download")
                 .stream()
                 .filter(aClass -> !aClass.isInterface())

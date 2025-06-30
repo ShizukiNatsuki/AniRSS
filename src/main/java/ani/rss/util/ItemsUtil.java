@@ -3,7 +3,7 @@ package ani.rss.util;
 import ani.rss.entity.Ani;
 import ani.rss.entity.Config;
 import ani.rss.entity.Item;
-import ani.rss.enums.MessageEnum;
+import ani.rss.enums.NotificationStatusEnum;
 import ani.rss.enums.StringEnum;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.date.DateTime;
@@ -14,6 +14,7 @@ import cn.hutool.core.lang.Assert;
 import cn.hutool.core.text.StrFormatter;
 import cn.hutool.core.thread.ThreadUtil;
 import cn.hutool.core.util.*;
+import cn.hutool.crypto.SecureUtil;
 import cn.hutool.http.HttpResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.w3c.dom.*;
@@ -49,13 +50,13 @@ public class ItemsUtil {
                 .peek(item -> item.setMaster(true))
                 .toList());
 
-        if (!config.getBackRss()) {
+        if (!config.getStandbyRss()) {
             items.sort(Comparator.comparingDouble(Item::getEpisode));
             return items;
         }
 
-        List<Ani.BackRss> backRss = ani.getBackRssList();
-        for (Ani.BackRss rss : backRss) {
+        List<Ani.StandbyRss> standbyRssList = ani.getStandbyRssList();
+        for (Ani.StandbyRss rss : standbyRssList) {
             ThreadUtil.sleep(1000);
             s = HttpReq.get(rss.getUrl(), true)
                     .timeout(config.getRssTimeout() * 1000)
@@ -315,7 +316,7 @@ public class ItemsUtil {
 
         for (Integer i : list) {
             String s = StrFormatter.format("缺少集数 {} S{}E{}", title, String.format("%02d", season), String.format("%02d", i));
-            String key = "omit:" + Md5Util.digestHex(s);
+            String key = "omit:" + SecureUtil.md5(s);
             if (MyCacheUtil.containsKey(key)) {
                 // 一天内已经提醒过了
                 continue;
@@ -330,14 +331,14 @@ public class ItemsUtil {
             return;
         }
 
-        MessageUtil.send(config, ani, CollUtil.join(sList, "\n"), MessageEnum.OMIT);
+        NotificationUtil.send(config, ani, CollUtil.join(sList, "\n"), NotificationStatusEnum.OMIT);
     }
 
     public static int currentEpisodeNumber(Ani ani, List<Item> items) {
         Config config = ConfigUtil.CONFIG;
-        Boolean backRss = config.getBackRss();
+        Boolean standbyRss = config.getStandbyRss();
         Boolean coexist = config.getCoexist();
-        if (backRss && coexist) {
+        if (standbyRss && coexist) {
             // 开启多字幕组共存模式则只计算主rss集数
             items = items.stream()
                     .filter(Item::getMaster)
@@ -411,7 +412,7 @@ public class ItemsUtil {
                     }
                     String text = StrFormatter.format("检测到{}, 已摸鱼{}天", ani.getTitle(), day);
 
-                    String key = "procrastinating:" + Md5Util.digestHex(text);
+                    String key = "procrastinating:" + SecureUtil.md5(text);
 
                     if (MyCacheUtil.containsKey(key)) {
                         // 一天内已经提醒过了
@@ -419,7 +420,7 @@ public class ItemsUtil {
                     }
 
                     MyCacheUtil.put(key, text, TimeUnit.DAYS.toMillis(1));
-                    MessageUtil.send(config, ani, text, MessageEnum.PROCRASTINATING);
+                    NotificationUtil.send(config, ani, text, NotificationStatusEnum.PROCRASTINATING);
                 });
     }
 

@@ -30,15 +30,8 @@ public class Ani implements Serializable {
 
     /**
      * 备用rss
-     *
-     * @deprecated
      */
-    private List<String> backRss;
-
-    /**
-     * 备用rss
-     */
-    private List<BackRss> backRssList;
+    private List<StandbyRss> standbyRssList;
 
     /**
      * 标题
@@ -203,13 +196,32 @@ public class Ani implements Serializable {
      */
     private Boolean procrastinating;
 
-    public static Ani bulidAni() {
+    /**
+     * 自定义重命名模版
+     */
+    private Boolean customRenameTemplateEnable;
+
+    /**
+     * 自定义重命名模版
+     */
+    private String customRenameTemplate;
+
+    /**
+     * 上次下载完成时间
+     */
+    private Long lastDownloadTime;
+
+    /**
+     * 消息通知
+     */
+    private Boolean message;
+
+    public static Ani createAni() {
         Ani newAni = new Ani();
         Config config = ConfigUtil.CONFIG;
         return newAni
                 .setId(UUID.fastUUID().toString())
-                .setBackRss(new ArrayList<>())
-                .setBackRssList(new ArrayList<>())
+                .setStandbyRssList(new ArrayList<>())
                 .setOffset(0)
                 .setYear(1970)
                 .setMonth(1)
@@ -217,6 +229,7 @@ public class Ani implements Serializable {
                 .setEnable(true)
                 .setOva(false)
                 .setScore(0.0)
+                .setLastDownloadTime(0L)
                 .setImage("")
                 .setThemoviedbName("")
                 .setCustomDownloadPath(false)
@@ -241,12 +254,15 @@ public class Ani implements Serializable {
                                 .setDate(new Date())
                 )
                 .setUpload(config.getUpload())
-                .setProcrastinating(true);
+                .setProcrastinating(true)
+                .setCustomRenameTemplate(config.getRenameTemplate())
+                .setCustomRenameTemplateEnable(false)
+                .setMessage(true);
     }
 
     @Data
     @Accessors(chain = true)
-    public static class BackRss implements Serializable {
+    public static class StandbyRss implements Serializable {
         /**
          * 字幕组
          */

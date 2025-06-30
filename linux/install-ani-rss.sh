@@ -1,6 +1,5 @@
 #!/bin/bash
 # ANI-RSS 一体化安装脚本 with Systemd 服务
-# 版本: 2.0
 # 适用系统: Ubuntu/Debian/CentOS/RHEL
 
 # 定义颜色代码
@@ -131,12 +130,6 @@ verify_install() {
         echo -e "${RED}服务未正常运行${NC}"
         exit 1
     fi
-
-#    sleep 10
-#    if ! ss -tulnp | grep -q ":$PORT"; then
-#        echo -e "${RED}端口 $PORT 未监听${NC}"
-#        exit 1
-#    fi
 
     echo -e "${GREEN}验证通过，服务运行正常${NC}"
 }

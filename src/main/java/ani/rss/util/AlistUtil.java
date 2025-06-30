@@ -3,14 +3,15 @@ package ani.rss.util;
 import ani.rss.entity.Ani;
 import ani.rss.entity.Config;
 import ani.rss.entity.TorrentsInfo;
-import ani.rss.enums.MessageEnum;
+import ani.rss.enums.NotificationStatusEnum;
 import ani.rss.enums.TorrentsTags;
 import cn.hutool.core.lang.Assert;
 import cn.hutool.core.lang.Opt;
 import cn.hutool.core.text.StrFormatter;
 import cn.hutool.core.thread.ExecutorBuilder;
 import cn.hutool.core.thread.ThreadUtil;
-import cn.hutool.core.util.StrUtil;
+import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.ReUtil;
 import cn.hutool.core.util.URLUtil;
 import cn.hutool.http.Header;
 import cn.hutool.http.HttpConfig;
@@ -73,7 +74,7 @@ public class AlistUtil {
         String downloadDir = FilePathUtil.getAbsolutePath(torrentsInfo.getDownloadDir());
 
         List<String> files = torrentsInfo.getFiles().get();
-        String filePath = getPath(torrentsInfo, ani);
+        String filePath = getPath(ani);
         for (String fileName : files) {
             String finalFilePath = filePath + "/" + fileName;
             File file = new File(downloadDir + "/" + fileName);
@@ -90,9 +91,6 @@ public class AlistUtil {
                 for (int i = 0; i < alistRetry; i++) {
                     try {
                         String url = alistHost;
-                        if (url.endsWith("/")) {
-                            url = url.substring(0, url.length() - 1);
-                        }
                         // 使用流式上传
                         url += "/api/fs/form";
 
@@ -121,7 +119,7 @@ public class AlistUtil {
                                         text = StrFormatter.format("已向alist添加上传任务 {}", fileName);
                                     }
                                     log.info(text);
-                                    MessageUtil.send(config, ani, text, MessageEnum.ALIST_UPLOAD);
+                                    NotificationUtil.send(config, ani, text, NotificationStatusEnum.ALIST_UPLOAD);
                                 });
                         TorrentUtil.addTags(torrentsInfo, TorrentsTags.UPLOAD_COMPLETED.getValue());
                         return;
@@ -130,7 +128,7 @@ public class AlistUtil {
                     }
                 }
                 if (AfdianUtil.verifyExpirationTime()) {
-                    MessageUtil.send(config, ani, "alist上传失败 " + fileName, MessageEnum.ERROR);
+                    NotificationUtil.send(config, ani, "alist上传失败 " + fileName, NotificationStatusEnum.ERROR);
                 }
             });
         }
@@ -139,7 +137,7 @@ public class AlistUtil {
     /**
      * 刷新 Alist 路径
      */
-    public static void refresh(TorrentsInfo torrentsInfo, Ani ani) {
+    public static void refresh(Ani ani) {
         Config config = ConfigUtil.CONFIG;
         Boolean refresh = config.getAlistRefresh();
         if (!refresh) {
@@ -150,8 +148,7 @@ public class AlistUtil {
 
         verify();
 
-        String finalPath = getPath(torrentsInfo, ani);
-        String rootPath = getRootPath(ani) + "/";
+        String finalPath = getPath(ani);
         EXECUTOR.execute(() -> {
             Long getAlistRefreshDelay = config.getAlistRefreshDelayed();
             if (getAlistRefreshDelay > 0) {
@@ -160,30 +157,19 @@ public class AlistUtil {
             log.info("刷新 Alist 路径: {}", finalPath);
 
             try {
+                HttpReq
+                        .post(alistHost + "/api/fs/mkdir", false)
+                        .header(Header.AUTHORIZATION, alistToken)
+                        .body(GsonStatic.toJson(Map.of("path", finalPath)))
+                        .then(HttpReq::assertStatus);
+
                 String url = alistHost;
-                if (url.endsWith("/")) {
-                    url = url.substring(0, url.length() - 1);
-                }
                 url += "/api/fs/list";
 
                 Map<String, Object> resolved = Map.of(
                         "path", finalPath,
                         "refresh", true
                 );
-                Map<String, Object> root = Map.of(
-                        "path", rootPath,
-                        "refresh", true
-                );
-                HttpReq.post(url)
-                        .timeout(1000 * 20)
-                        .header(Header.AUTHORIZATION, alistToken)
-                        .body(GsonStatic.toJson(root))
-                        .then(res -> {
-                            Assert.isTrue(res.isOk(), "刷新失败 路径: {} 状态码: {}", rootPath, res.getStatus());
-                            JsonObject jsonObject = GsonStatic.fromJson(res.body(), JsonObject.class);
-                            int code = jsonObject.get("code").getAsInt();
-                            Assert.isTrue(code == 200, "刷新失败 路径: {} 状态码: {}", rootPath, code);
-                        });
                 HttpReq.post(url)
                         .timeout(1000 * 20)
                         .header(Header.AUTHORIZATION, alistToken)
@@ -202,6 +188,9 @@ public class AlistUtil {
         });
     }
 
+    /**
+     * 校验配置
+     */
     public static void verify() {
         Config config = ConfigUtil.CONFIG;
         String alistHost = config.getAlistHost();
@@ -213,39 +202,25 @@ public class AlistUtil {
         Assert.notBlank(alistToken, "alistToken 未配置");
     }
 
-    private static String getPath(TorrentsInfo torrentsInfo, Ani ani) {
-        Config config = ConfigUtil.CONFIG;
-        String downloadDir = FilePathUtil.getAbsolutePath(torrentsInfo.getDownloadDir());
-        String downloadPath = FilePathUtil.getAbsolutePath(config.getDownloadPath());
-        String ovaDownloadPath = FilePathUtil.getAbsolutePath(config.getOvaDownloadPath());
-        String filePath = getRootPath(ani);
+    /**
+     * 获取上传位置
+     *
+     * @param ani
+     * @return
+     */
+    private static String getPath(Ani ani) {
+        ani = ObjectUtil.clone(ani)
+                // 因为临时修改下载位置模版以获取对应下载位置, 要关闭自定义下载位置
+                .setCustomDownloadPath(false);
+        Config config = ObjectUtil.clone(ConfigUtil.CONFIG);
 
-        if (StrUtil.isNotBlank(downloadPath) && downloadDir.startsWith(downloadPath)) {
-            filePath += downloadDir.substring(downloadPath.length());
-        } else if (StrUtil.isNotBlank(ovaDownloadPath) && downloadDir.startsWith(ovaDownloadPath)) {
-            filePath += downloadDir.substring(ovaDownloadPath.length());
-        } else {
-            filePath += downloadDir;
-        }
-        return filePath;
-    }
+        config.setDownloadPathTemplate(config.getAlistPath())
+                .setOvaDownloadPathTemplate(config.getAlistOvaPath());
 
-    private static String getRootPath(Ani ani) {
-        Config config = ConfigUtil.CONFIG;
-        String alistOvaPath = FilePathUtil.getAbsolutePath(config.getAlistOvaPath());
-        String filePath = FilePathUtil.getAbsolutePath(config.getAlistPath());
+        String path = FilePathUtil.getAbsolutePath(TorrentUtil.getDownloadPath(ani, config));
 
-        Boolean ova = Opt.ofNullable(ani)
-                .map(Ani::getOva)
-                .orElse(false);
+        path = ReUtil.replaceAll(path, "^[A-z]:", "");
 
-        if (ova) {
-            filePath = StrUtil.blankToDefault(alistOvaPath, filePath);
-        }
-        if (filePath.endsWith("/")) {
-            filePath = filePath.substring(0, filePath.length() - 1);
-
-        }
-        return filePath;
+        return path;
     }
 }

@@ -32,10 +32,12 @@
           <el-button :loading="importDataLoading" bg icon="Download" text @click="importData">
             导入
           </el-button>
-          <el-button type="primary" :disabled="!selectList.length" bg icon="CircleCheck" text @click="batchEnable(true)">
+          <el-button type="primary" :disabled="!selectList.length" bg icon="CircleCheck" text
+                     @click="batchEnable(true)">
             启用
           </el-button>
-          <el-button type="warning" :disabled="!selectList.length" bg icon="CircleClose" text @click="batchEnable(false)">
+          <el-button type="warning" :disabled="!selectList.length" bg icon="CircleClose" text
+                     @click="batchEnable(false)">
             禁用
           </el-button>
           <el-button icon="Remove" bg text :disabled="!selectList.length" type="danger"
@@ -77,9 +79,8 @@
   </el-dialog>
 </template>
 <script setup>
-
 import {ref} from "vue";
-import api from "../api.js";
+import api from "@/js/api.js";
 import {ElMessage} from "element-plus";
 import Del from "./Del.vue";
 
@@ -157,7 +158,7 @@ let exportData = () => {
   const a = document.createElement("a");
   a.style.display = "none";
   a.href = url;
-  a.download = "ani.json";
+  a.download = "ani.v2.json";
   document.body.appendChild(a);
   a.click();
   URL.revokeObjectURL(url);

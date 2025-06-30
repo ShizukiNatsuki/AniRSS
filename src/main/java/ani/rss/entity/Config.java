@@ -1,6 +1,5 @@
 package ani.rss.entity;
 
-import ani.rss.enums.MessageEnum;
 import lombok.Data;
 import lombok.experimental.Accessors;
 
@@ -36,7 +35,7 @@ public class Config implements Serializable {
     /**
      * 下载工具
      */
-    private String download;
+    private String downloadToolType;
 
     /**
      * 下载重试次数
@@ -44,19 +43,19 @@ public class Config implements Serializable {
     private Integer downloadRetry;
 
     /**
-     * 地址
+     * 下载工具 地址
      */
-    private String host;
+    private String downloadToolHost;
 
     /**
-     * 用户名
+     * 下载工具 用户名
      */
-    private String username;
+    private String downloadToolUsername;
 
     /**
-     * 密码
+     * 下载工具 密码
      */
-    private String password;
+    private String downloadToolPassword;
 
     /**
      * qb下载时，使用qb自身的保存路径配置(未下载完成的使用临时目录，复制种子文件)
@@ -81,12 +80,12 @@ public class Config implements Serializable {
     /**
      * 下载路径
      */
-    private String downloadPath;
+    private String downloadPathTemplate;
 
     /**
      * 剧场版下载路径
      */
-    private String ovaDownloadPath;
+    private String ovaDownloadPathTemplate;
 
     /**
      * 检测是否死种
@@ -151,7 +150,7 @@ public class Config implements Serializable {
     /**
      * 仅在主RSS更新后删除备用RSS
      */
-    private Boolean deleteBackRSSOnly;
+    private Boolean deleteStandbyRSSOnly;
 
     /**
      * 删除本地文件
@@ -169,26 +168,6 @@ public class Config implements Serializable {
     private Boolean titleYear;
 
     /**
-     * 根据首字母存放
-     */
-    private Boolean acronym;
-
-    /**
-     * 根据季度存放
-     */
-    private Boolean quarter;
-
-    /**
-     * 季度合并
-     */
-    private Boolean quarterMerge;
-
-    /**
-     * 按照年份存放
-     */
-    private Boolean yearStorage;
-
-    /**
      * 自动禁用已完结番剧的订阅
      */
     private Boolean autoDisabled;
@@ -201,7 +180,7 @@ public class Config implements Serializable {
     /**
      * 备用RSS
      */
-    private Boolean backRss;
+    private Boolean standbyRss;
 
     /**
      * 多字幕组共存模式
@@ -249,26 +228,6 @@ public class Config implements Serializable {
     private Integer downloadCount;
 
     /**
-     * 邮箱是否开启
-     */
-    private Boolean mail;
-
-    /**
-     * 发件人
-     */
-    private MyMailAccount mailAccount;
-
-    /**
-     * 收件人
-     */
-    private String mailAddressee;
-
-    /**
-     * mail 发送图片
-     */
-    private Boolean mailImage;
-
-    /**
      * 登录信息
      */
     private Login login;
@@ -299,61 +258,6 @@ public class Config implements Serializable {
     private Boolean enabledExclude;
 
     /**
-     * telegram
-     */
-    private Boolean telegram;
-
-    /**
-     * telegram bot token
-     */
-    private String telegramBotToken;
-
-    /**
-     * telegram chat_id
-     */
-    private String telegramChatId;
-
-    /**
-     * telegram topic id
-     */
-    private Integer telegramTopicId;
-
-    /**
-     * telegram Api Host
-     */
-    private String telegramApiHost;
-
-    /**
-     * telegram 发送图片
-     */
-    private Boolean telegramImage;
-
-    /**
-     * telegram 格式
-     */
-    private String telegramFormat;
-
-    /**
-     * webHookMethod
-     */
-    private String webHookMethod;
-
-    /**
-     * webHookUrl
-     */
-    private String webHookUrl;
-
-    /**
-     * webHookBody
-     */
-    private String webHookBody;
-
-    /**
-     * webHook
-     */
-    private Boolean webHook;
-
-    /**
      * BGM日文标题
      */
     private Boolean bgmJpName;
@@ -374,6 +278,11 @@ public class Config implements Serializable {
     private String tmdbLanguage;
 
     /**
+     * 获取罗马音
+     */
+    private Boolean tmdbRomaji;
+
+    /**
      * 开启ip白名单
      */
     private Boolean ipWhitelist;
@@ -382,11 +291,6 @@ public class Config implements Serializable {
      * ip白名单
      */
     private String ipWhitelistStr;
-
-    /**
-     * 季命名方式
-     */
-    private String seasonName;
 
     /**
      * 显示已下载视频列表
@@ -439,39 +343,9 @@ public class Config implements Serializable {
     private Boolean renameDelTmdbId;
 
     /**
-     * 通知类型
-     */
-    private List<MessageEnum> messageList;
-
-    /**
      * 校验登录IP
      */
     private Boolean verifyLoginIp;
-
-    /**
-     * server酱类型：server酱和server酱3
-     */
-    private String serverChanType;
-
-    /**
-     * server酱 sendKey
-     */
-    private String serverChanSendKey;
-
-    /**
-     * server酱3 apiUrl
-     */
-    private String serverChan3ApiUrl;
-
-    /**
-     * server酱 开关
-     */
-    private Boolean serverChan;
-
-    /**
-     * 系统通知
-     */
-    private Boolean systemMsg;
 
     /**
      * 自动更新 trackers
@@ -486,7 +360,7 @@ public class Config implements Serializable {
     /**
      * 消息模版
      */
-    private String messageTemplate;
+    private String notificationTemplate;
 
     /**
      * 自动更新
@@ -604,31 +478,6 @@ public class Config implements Serializable {
     private Boolean tryOut;
 
     /**
-     * emby扫描媒体库
-     */
-    private Boolean embyRefresh;
-
-    /**
-     * emby地址
-     */
-    private String embyHost;
-
-    /**
-     * emby api密钥
-     */
-    private String embyApiKey;
-
-    /**
-     * emby扫描媒体库
-     */
-    private List<String> embyRefreshViewIds;
-
-    /**
-     * emby延迟扫描
-     */
-    private Long embyDelayed;
-
-    /**
      * 摸鱼
      */
     private Boolean procrastinating;
@@ -679,6 +528,11 @@ public class Config implements Serializable {
     private Integer alistDownloadTimeout;
 
     /**
+     * alist下载重试次数
+     */
+    private Long alistDownloadRetryNumber;
+
+    /**
      * tvshow.nfo
      */
     private Boolean tvShowNfo;
@@ -692,4 +546,24 @@ public class Config implements Serializable {
      * 备份天数
      */
     private Integer configBackupDay;
+
+    /**
+     * 展示最后更新时间
+     */
+    private Boolean showLastDownloadTime;
+
+    /**
+     * 番剧完结迁移
+     */
+    private Boolean completed;
+
+    /**
+     * 番剧完结迁移位置
+     */
+    private String completedPathTemplate;
+
+    /**
+     * 通知
+     */
+    private List<NotificationConfig> notificationConfigList;
 }

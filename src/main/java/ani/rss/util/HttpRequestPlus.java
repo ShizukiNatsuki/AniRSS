@@ -2,7 +2,6 @@ package ani.rss.util;
 
 import ani.rss.entity.Config;
 import cn.hutool.core.net.url.UrlBuilder;
-import cn.hutool.core.util.ReUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.http.HttpRequest;
 import cn.hutool.http.HttpResponse;
@@ -39,14 +38,6 @@ public class HttpRequestPlus extends HttpRequest {
 
         if (StrUtil.isBlank(github) || github.equals("None")) {
             return new HttpRequestPlus(url);
-        }
-
-        if (github.endsWith("/")) {
-            github = StrUtil.sub(github, 0, github.length() - 1);
-        }
-
-        if (!ReUtil.contains("^https?://", github)) {
-            github = "https://" + github;
         }
 
         // 处理github加速

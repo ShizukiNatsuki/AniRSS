@@ -1,17 +1,17 @@
 package ani.rss.util;
 
-import ani.rss.entity.Ani;
-import ani.rss.entity.BgmInfo;
-import ani.rss.entity.Config;
-import ani.rss.entity.Item;
+import ani.rss.action.ClearCacheAction;
+import ani.rss.entity.*;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.bean.copier.CopyOptions;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.io.resource.ResourceUtil;
 import cn.hutool.core.lang.Assert;
+import cn.hutool.core.thread.ThreadUtil;
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.core.util.URLUtil;
+import cn.hutool.crypto.SecureUtil;
 import cn.hutool.http.HttpUtil;
 import cn.hutool.json.JSONUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +25,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class AniUtil {
 
     public static final List<Ani> ANI_LIST = new CopyOnWriteArrayList<>();
+    public static final String FILE_NAME = "ani.v2.json";
 
     /**
      * 获取订阅配置文件
@@ -33,7 +34,7 @@ public class AniUtil {
      */
     public static File getAniFile() {
         File configDir = ConfigUtil.getConfigDir();
-        return new File(configDir + File.separator + "ani.json");
+        return new File(configDir + File.separator + FILE_NAME);
     }
 
     /**
@@ -47,36 +48,18 @@ public class AniUtil {
         }
         String s = FileUtil.readUtf8String(configFile);
         List<Ani> anis = GsonStatic.fromJsonList(s, Ani.class);
+
+        CopyOptions copyOptions = CopyOptions
+                .create()
+                .setIgnoreNullValue(true)
+                .setOverride(false);
+
         for (Ani ani : anis) {
-            Ani newAni = Ani.bulidAni();
-            BeanUtil.copyProperties(ani, newAni, CopyOptions
-                    .create()
-                    .setIgnoreNullValue(true));
-            ANI_LIST.add(newAni);
+            Ani newAni = Ani.createAni();
+            BeanUtil.copyProperties(newAni, ani, copyOptions);
+            ANI_LIST.add(ani);
         }
         log.debug("加载订阅 共{}项", ANI_LIST.size());
-
-
-        // 处理旧数据
-        for (Ani ani : ANI_LIST) {
-            // 备用rss数据结构改变
-            List<Ani.BackRss> backRssList = ani.getBackRssList();
-            List<String> backRss = ani.getBackRss();
-            if (backRssList.isEmpty() && !backRss.isEmpty()) {
-                for (String rss : backRss) {
-                    backRssList.add(
-                            new Ani.BackRss()
-                                    .setLabel("未知字幕组")
-                                    .setUrl(rss)
-                    );
-                }
-            }
-            for (Ani.BackRss rss : backRssList) {
-                Integer offset = rss.getOffset();
-                offset = ObjectUtil.defaultIfNull(offset, ani.getOffset());
-                rss.setOffset(offset);
-            }
-        }
     }
 
     /**
@@ -109,7 +92,7 @@ public class AniUtil {
         type = StrUtil.blankToDefault(type, "mikan");
         String subgroupId = MikanUtil.getSubgroupId(url);
 
-        Ani ani = Ani.bulidAni();
+        Ani ani = Ani.createAni();
         ani.setUrl(url.trim());
 
         if ("mikan".equals(type)) {
@@ -204,7 +187,7 @@ public class AniUtil {
         if (StrUtil.isBlank(coverUrl)) {
             return cover;
         }
-        String filename = Md5Util.digestHex(coverUrl);
+        String filename = SecureUtil.md5(coverUrl);
         filename = filename.charAt(0) + "/" + filename + "." + FileUtil.extName(URLUtil.getPath(coverUrl));
         FileUtil.mkdir(configDir + "/files/" + filename.charAt(0));
         File file = new File(configDir + "/files/" + filename);
@@ -257,5 +240,116 @@ public class AniUtil {
         Map<String, String> decodeParamMap = HttpUtil.decodeParamMap(url, StandardCharsets.UTF_8);
         return decodeParamMap.get("bangumiId");
     }
+
+
+    /**
+     * 订阅完结迁移
+     *
+     * @param ani
+     */
+    public static void completed(Ani ani) {
+        if (Objects.isNull(ani)) {
+            return;
+        }
+        ani = ObjectUtil.clone(ani);
+
+        String title = ani.getTitle();
+        boolean ova = ani.getOva();
+        boolean enable = ani.getEnable();
+        int currentEpisodeNumber = ani.getCurrentEpisodeNumber();
+        int totalEpisodeNumber = ani.getTotalEpisodeNumber();
+
+        if (totalEpisodeNumber < 1) {
+            // 总集数为空
+            return;
+        }
+
+        if (currentEpisodeNumber < totalEpisodeNumber) {
+            // 未完结
+            return;
+        }
+
+        if (enable) {
+            // 仍是启用的话 主RSS仍未完结
+            return;
+        }
+
+        if (ova) {
+            // 剧场版不进行迁移
+            return;
+        }
+
+        Config config = ObjectUtil.clone(ConfigUtil.CONFIG);
+
+        boolean autoDisabled = config.getAutoDisabled();
+        if (!autoDisabled) {
+            // 未开启自动禁用订阅
+            return;
+        }
+
+        boolean completed = config.getCompleted();
+        if (!completed) {
+            // 未开启
+            return;
+        }
+
+        Assert.isTrue(AfdianUtil.verifyExpirationTime(), "未解锁捐赠, 无法使用订阅完结迁移");
+
+        String completedPathTemplate = config.getCompletedPathTemplate();
+
+        if (StrUtil.isBlank(completedPathTemplate)) {
+            // 路径为空
+            return;
+        }
+
+        // 旧文件路径
+        File oldPath = TorrentUtil.getDownloadPath(ani, config);
+
+        config.setDownloadPathTemplate(completedPathTemplate);
+        // 因为临时修改下载位置模版以获取对应下载位置, 要关闭自定义下载位置
+        ani.setCustomDownloadPath(false);
+
+        // 新文件路径
+        File newPath = TorrentUtil.getDownloadPath(ani, config);
+
+        if (!oldPath.exists()) {
+            // 旧文件不存在
+            return;
+        }
+
+        FileUtil.mkdir(newPath);
+
+        List<TorrentsInfo> torrentsInfos = TorrentUtil.getTorrentsInfos();
+
+        for (TorrentsInfo torrentsInfo : torrentsInfos) {
+            String downloadDir = torrentsInfo.getDownloadDir();
+            if (!downloadDir.equals(FilePathUtil.getAbsolutePath(oldPath))) {
+                // 旧位置不相同
+                continue;
+            }
+            // 修改保存位置
+            TorrentUtil.setSavePath(torrentsInfo, FilePathUtil.getAbsolutePath(newPath));
+        }
+
+        if (!torrentsInfos.isEmpty()) {
+            ThreadUtil.sleep(3000);
+        }
+
+        File[] files = ObjectUtil.defaultIfNull(oldPath.listFiles(), new File[0]);
+
+        log.info("订阅已完结 {}, 移动已完结文件共 {} 个", title, files.length);
+
+        for (File file : files) {
+            if (!file.exists()) {
+                continue;
+            }
+            // 移动文件
+            log.info("移动 {} ==> {}", file, newPath);
+            FileUtil.move(file, newPath, true);
+            // 清理残留文件夹
+            ClearCacheAction.clearParentFile(file);
+        }
+    }
+
 
 }

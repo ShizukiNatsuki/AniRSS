@@ -2,17 +2,23 @@ package ani.rss.util;
 
 import ani.rss.entity.Config;
 import ani.rss.entity.Login;
-import ani.rss.entity.MyMailAccount;
-import ani.rss.enums.MessageEnum;
-import ani.rss.enums.ServerChanTypeEnum;
+import ani.rss.entity.NotificationConfig;
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.bean.DynaBean;
 import cn.hutool.core.bean.copier.CopyOptions;
 import cn.hutool.core.date.DatePattern;
 import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.io.FileUtil;
+import cn.hutool.core.lang.func.Func1;
+import cn.hutool.core.lang.func.LambdaUtil;
+import cn.hutool.core.text.StrFormatter;
 import cn.hutool.core.thread.ThreadUtil;
 import cn.hutool.core.util.ArrayUtil;
+import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.ZipUtil;
+import cn.hutool.crypto.SecureUtil;
+import cn.hutool.system.OsInfo;
+import cn.hutool.system.SystemUtil;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
@@ -27,12 +33,50 @@ import java.util.stream.Stream;
 public class ConfigUtil {
 
     public static final Config CONFIG = new Config();
+    public static final String FILE_NAME = "config.v2.json";
 
     /*
       默认配置
      */
     static {
-        String password = Md5Util.digestHex("admin");
+        String rootPath = "/Media";
+
+        OsInfo osInfo = SystemUtil.getOsInfo();
+        if (osInfo.isMac()) {
+            rootPath = FileUtil.getUserHomePath() + "/Movies";
+        }
+
+        String downloadPath = FilePathUtil.getAbsolutePath(new File(rootPath + "/番剧"));
+        String ovaDownloadPath = FilePathUtil.getAbsolutePath(new File(rootPath + "/剧场版"));
+        String completedPath = FilePathUtil.getAbsolutePath(new File(rootPath + "/已完结番剧"));
+
+        String downloadPathTemplate = StrFormatter.format("{}/${letter}/${title}/Season ${season}", downloadPath);
+        String ovaDownloadPathTemplate = StrFormatter.format("{}/${letter}/${title}", ovaDownloadPath);
+        String completedPathTemplate = StrFormatter.format("{}/${letter}/${title}/Season ${season}", completedPath);
+
+        String password = SecureUtil.md5("admin");
+
+        String notificationTemplate = """
+                ${emoji}${emoji}${emoji}
+                事件类型: ${action}
+                标题: ${title}
+                评分: ${score}
+                TMDB: ${tmdburl}
+                TMDB标题: ${themoviedbName}
+                BGM: ${bgmUrl}
+                季: ${season}
+                集: ${episode}
+                字幕组: ${subgroup}
+                进度: ${currentEpisodeNumber}/${totalEpisodeNumber}
+                首播:  ${year}年${month}月${date}日
+                事件: ${text}
+                下载位置: ${downloadPath}
+                TMDB集标题: ${episodeTitle}
+                ${emoji}${emoji}${emoji}
+                """;
+
+        String apiKey = RandomUtil.randomString(32).toLowerCase();
+
         CONFIG.setSleep(15)
                 .setMikanHost("https://mikanime.tv")
                 .setTmdbApi("https://api.themoviedb.org")
@@ -48,28 +92,24 @@ public class ConfigUtil {
                 .setFileExist(false)
                 .setAwaitStalledUP(true)
                 .setDelete(false)
-                .setDeleteBackRSSOnly(false)
+                .setDeleteStandbyRSSOnly(false)
                 .setDeleteFiles(false)
                 .setOffset(false)
                 .setTitleYear(false)
-                .setAcronym(false)
-                .setQuarter(false)
-                .setQuarterMerge(false)
-                .setYearStorage(false)
                 .setAutoDisabled(false)
-                .setDownloadPath(FilePathUtil.getAbsolutePath(new File("/Media/番剧")))
-                .setOvaDownloadPath(FilePathUtil.getAbsolutePath(new File("/Media/剧场版")))
-                .setHost("")
-                .setDownload("qBittorrent")
+                .setDownloadPathTemplate(downloadPathTemplate)
+                .setOvaDownloadPathTemplate(ovaDownloadPathTemplate)
+                .setDownloadToolHost("")
+                .setDownloadToolType("qBittorrent")
                 .setDownloadRetry(3)
-                .setUsername("")
-                .setPassword("")
+                .setDownloadToolUsername("")
+                .setDownloadToolPassword("")
                 .setQbUseDownloadPath(false)
                 .setRatioLimit(-2)
                 .setSeedingTimeLimit(-2)
                 .setInactiveSeedingTimeLimit(-2)
                 .setSkip5(true)
-                .setBackRss(false)
+                .setStandbyRss(false)
                 .setCoexist(false)
                 .setLogsMax(2048)
                 .setDebug(false)
@@ -79,18 +119,6 @@ public class ConfigUtil {
                 .setProxyUsername("")
                 .setProxyPassword("")
                 .setDownloadCount(0)
-                .setMail(false)
-                .setMailAddressee("")
-                .setMailImage(true)
-                .setMailAccount(
-                        new MyMailAccount()
-                                .setHost("")
-                                .setPort(25)
-                                .setFrom("")
-                                .setPass("")
-                                .setSslEnable(false)
-                                .setStarttlsEnable(false)
-                )
                 .setLogin(new Login()
                         .setUsername("admin")
                         .setPassword(password)
@@ -100,24 +128,13 @@ public class ConfigUtil {
                 .setExclude(List.of("720[Pp]", "\\d-\\d", "合集", "特别篇"))
                 .setImportExclude(false)
                 .setEnabledExclude(false)
-                .setTelegram(false)
-                .setTelegramChatId("")
-                .setTelegramBotToken("")
-                .setTelegramApiHost("https://api.telegram.org")
-                .setTelegramImage(true)
-                .setTelegramTopicId(-1)
-                .setTelegramFormat("")
-                .setWebHook(false)
                 .setTmdb(false)
                 .setBgmJpName(false)
                 .setTmdbId(false)
                 .setTmdbLanguage("zh-CN")
+                .setTmdbRomaji(false)
                 .setIpWhitelist(false)
                 .setIpWhitelistStr("")
-                .setWebHookBody("")
-                .setWebHookUrl("")
-                .setWebHookMethod("POST")
-                .setSeasonName("Season 1")
                 .setShowPlaylist(true)
                 .setOmit(true)
                 .setBgmToken("")
@@ -129,26 +146,15 @@ public class ConfigUtil {
                 .setRenameTemplate("[${subgroup}] ${title} S${seasonFormat}E${episodeFormat}")
                 .setRenameDelYear(false)
                 .setRenameDelTmdbId(false)
-                .setMessageList(List.of(
-                        MessageEnum.DOWNLOAD_START,
-                        MessageEnum.OMIT,
-                        MessageEnum.ERROR
-                ))
                 .setVerifyLoginIp(false)
-                .setServerChan(false)
-                .setServerChanType(ServerChanTypeEnum.SERVER_CHAN.getType())
-                .setServerChanSendKey("")
-                .setServerChan3ApiUrl("")
-                .setSystemMsg(false)
                 .setAutoTrackersUpdate(false)
                 .setTrackersUpdateUrls("https://cf.trackerslist.com/best.txt")
-                .setMessageTemplate("${text}")
                 .setAutoUpdate(false)
                 .setAlist(false)
                 .setAlistRetry(5)
                 .setAlistTask(true)
-                .setAlistPath("/")
-                .setAlistOvaPath("")
+                .setAlistPath("/115/Media/番剧/${letter}/${title}/Season ${season}")
+                .setAlistOvaPath("/115/Media/剧场版/${letter}/${title}")
                 .setAlistHost("")
                 .setAlistToken("")
                 .setVersion("")
@@ -158,7 +164,7 @@ public class ConfigUtil {
                 .setCustomEpisode(false)
                 .setCustomEpisodeStr(RenameUtil.REG_STR)
                 .setCustomEpisodeGroupIndex(2)
-                .setProvider("")
+                .setProvider("115 Cloud")
                 .setUpload(true)
                 .setUpLimit(0L)
                 .setDlLimit(0L)
@@ -166,10 +172,6 @@ public class ConfigUtil {
                 .setOutTradeNo("")
                 .setTryOut(false)
                 .setVerifyExpirationTime(false)
-                .setEmbyRefresh(false)
-                .setEmbyApiKey("")
-                .setEmbyRefreshViewIds(new ArrayList<>())
-                .setEmbyDelayed(0L)
                 .setProcrastinating(false)
                 .setProcrastinatingDay(14)
                 .setGithub("None")
@@ -180,9 +182,16 @@ public class ConfigUtil {
                 .setAlistRefreshDelayed(0L)
                 .setUpdateTotalEpisodeNumber(false)
                 .setAlistDownloadTimeout(60)
+                .setAlistDownloadRetryNumber(5L)
                 .setTvShowNfo(false)
                 .setConfigBackup(false)
-                .setConfigBackupDay(7);
+                .setConfigBackupDay(7)
+                .setShowLastDownloadTime(false)
+                .setCompleted(false)
+                .setCompletedPathTemplate(completedPathTemplate)
+                .setNotificationTemplate(notificationTemplate)
+                .setNotificationConfigList(new ArrayList<>())
+                .setApiKey(apiKey);
     }
 
     /**
@@ -203,7 +212,7 @@ public class ConfigUtil {
      */
     public static File getConfigFile() {
         File configDir = getConfigDir();
-        return new File(configDir + File.separator + "config.json");
+        return new File(configDir + File.separator + FILE_NAME);
     }
 
     /**
@@ -216,9 +225,12 @@ public class ConfigUtil {
             FileUtil.writeUtf8String(GsonStatic.toJson(CONFIG), configFile);
         }
         String s = FileUtil.readUtf8String(configFile);
-        BeanUtil.copyProperties(GsonStatic.fromJson(s, Config.class), CONFIG, CopyOptions
+
+        CopyOptions copyOptions = CopyOptions
                 .create()
-                .setIgnoreNullValue(true));
+                .setIgnoreNullValue(true);
+        BeanUtil.copyProperties(GsonStatic.fromJson(s, Config.class), CONFIG, copyOptions);
+        format(CONFIG);
         LogUtil.loadLogback();
         log.debug("加载配置文件 {}", configFile);
         TorrentUtil.load();
@@ -238,8 +250,8 @@ public class ConfigUtil {
         File configFile = getConfigFile();
         log.debug("保存配置 {}", configFile);
         try {
+            ConfigUtil.format(CONFIG);
             String json = GsonStatic.toJson(CONFIG);
-            // 校验json没有问题
             File temp = new File(configFile + ".temp");
             FileUtil.del(temp);
             FileUtil.writeUtf8String(json, temp);
@@ -275,7 +287,10 @@ public class ConfigUtil {
 
         log.info("正在备份设置 {}", backupFile.getName());
 
-        List<File> backupFiles = Stream.of("files", "torrents", "ani.json", "config.json", "database.db")
+        List<File> backupFiles = Stream.of(
+                        "files", "torrents", "database.db",
+                        AniUtil.FILE_NAME, ConfigUtil.FILE_NAME
+                )
                 .map(s -> configDir + "/" + s)
                 .map(File::new)
                 .filter(File::exists)
@@ -339,7 +354,82 @@ public class ConfigUtil {
                 log.error(e.getMessage(), e);
             }
         }
+    }
 
+
+    /**
+     * 处理设置内的url与文件路径标准
+     *
+     * @param config
+     */
+    public static void format(Config config) {
+        formatPath(config);
+        formatUrl(config);
+
+        String messageTemplate = config.getNotificationTemplate();
+        config.setNotificationTemplate(messageTemplate.trim());
+
+        NotificationConfig newNotificationConfig = NotificationConfig.createNotificationConfig();
+
+        List<NotificationConfig> notificationConfigList = config.getNotificationConfigList();
+
+        CopyOptions copyOptions = CopyOptions
+                .create()
+                .setIgnoreNullValue(true)
+                // 禁止覆盖模式 仅补全null值
+                .setOverride(false);
+
+        for (NotificationConfig notificationConfig : notificationConfigList) {
+            BeanUtil.copyProperties(newNotificationConfig, notificationConfig, copyOptions);
+        }
+    }
+
+    /**
+     * 处理url
+     *
+     * @param config
+     */
+    public static void formatUrl(Config config) {
+        List<Func1<Config, String>> func1List = List.of(
+                Config::getDownloadToolHost,
+                Config::getAlistHost,
+                Config::getMikanHost,
+                Config::getTmdbApi,
+                Config::getCustomGithubUrl
+        );
+
+        DynaBean dynaBean = DynaBean.create(config);
+
+        for (Func1<Config, String> func1 : func1List) {
+            String fieldName = LambdaUtil.getFieldName(func1);
+            String v = func1.callWithRuntimeException(config);
+            v = MyURLUtil.getUrlStr(v);
+            dynaBean.set(fieldName, v);
+        }
+    }
+
+    /**
+     * 处理文件路径
+     *
+     * @param config
+     */
+    public static void formatPath(Config config) {
+        List<Func1<Config, String>> func1List = List.of(
+                Config::getDownloadPathTemplate,
+                Config::getOvaDownloadPathTemplate,
+                Config::getCompletedPathTemplate,
+                Config::getAlistPath,
+                Config::getAlistOvaPath
+        );
+
+        DynaBean dynaBean = DynaBean.create(config);
+
+        for (Func1<Config, String> func1 : func1List) {
+            String fieldName = LambdaUtil.getFieldName(func1);
+            String v = func1.callWithRuntimeException(config);
+            v = FilePathUtil.getAbsolutePath(v);
+            dynaBean.set(fieldName, v);
+        }
     }
 
 }

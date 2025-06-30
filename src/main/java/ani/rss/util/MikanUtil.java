@@ -31,9 +31,6 @@ public class MikanUtil {
         Config config = ConfigUtil.CONFIG;
         String mikanHost = config.getMikanHost();
         mikanHost = StrUtil.blankToDefault(mikanHost, "https://mikanime.tv");
-        if (mikanHost.endsWith("/")) {
-            mikanHost = mikanHost.substring(0, mikanHost.length() - 1);
-        }
         return mikanHost;
     }
 
@@ -279,7 +276,10 @@ public class MikanUtil {
         try {
             jsonObject = HttpReq.get("https://bgm-cache.wushuo.top/bgm/score.json", true)
                     .timeout(1000 * 5)
-                    .thenFunction(res -> GsonStatic.fromJson(res.body(), JsonObject.class));
+                    .thenFunction(res -> {
+                        HttpReq.assertStatus(res);
+                        return GsonStatic.fromJson(res.body(), JsonObject.class);
+                    });
         } catch (Exception e) {
             log.error(e.getMessage(), e);
         }

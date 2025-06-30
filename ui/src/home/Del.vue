@@ -19,32 +19,19 @@
 
 <script setup>
 
-import {ref} from "vue";
-import api from "../api.js";
+import {markRaw, ref} from "vue";
+import api from "@/js/api.js";
 import {ElMessage, ElMessageBox} from "element-plus";
+import {Delete} from "@element-plus/icons-vue";
 
 const dialogVisible = ref(false)
 
-const aniList = ref([
-  {
-    'url': '',
-    'season': 1,
-    'offset': 0,
-    'title': '',
-    'themoviedbName': '',
-    'exclude': [],
-    'enable': true,
-    'ova': false,
-    'totalEpisodeNumber': '',
-    'customDownloadPath': false,
-    'downloadPath': ''
-  }
-])
+const aniList = ref([])
 
 let okLoading = ref(false)
 let deleteFiles = ref(false)
 
-const delAni = () => {
+const delAni = async () => {
   okLoading.value = true
   let action = () => api.del('api/ani?deleteFiles=' + deleteFiles.value, aniList.value.map(it => it['id']))
       .then(res => {
@@ -61,16 +48,41 @@ const delAni = () => {
     return
   }
 
-  ElMessageBox.confirm(
-      '将会删除整个文件夹, 是否执意继续?',
+  let downloadPath = ''
+
+  if (aniList.value.length === 1) {
+    let res = await api.post('api/downloadPath', aniList.value[0])
+    downloadPath = res.data['downloadPath']
+  }
+
+  let s = downloadPath ? `我确定删除文件夹 ${downloadPath}` : `我确定删除共${aniList.value.length}个订阅与本地文件`
+
+  ElMessageBox.prompt(
+      `<strong style="color: var(--el-color-danger);">
+        将会删除整个文件夹, 请在输入框输入对应文本继续！
+       </strong>
+       <br>
+       <span class="el-text el-text--small mx-1">
+        <strong>将此文本填入文本框</strong> [${s}]
+       </span>`,
       '警告',
       {
+        inputPlaceholder: '在此输入确认文本',
+        inputValidator: (it) => it === s,
+        inputErrorMessage: `请输入 [${s}]`,
+        dangerouslyUseHTMLString: true,
         confirmButtonText: '执意继续删除',
+        confirmButtonClass: 'is-text is-has-bg el-button--danger',
         cancelButtonText: '取消',
+        cancelButtonClass: 'is-text is-has-bg',
         type: 'warning',
+        icon: markRaw(Delete),
       }
   )
       .then(action)
+      .finally(() => {
+        okLoading.value = false
+      })
 }
 
 const show = (anis) => {
@@ -85,4 +97,11 @@ defineExpose({
 
 const emit = defineEmits(['load'])
 </script>
+
+<style scoped>
+.el-checkbox {
+  --el-checkbox-checked-text-color: var(--el-color-danger);
+  color: var(--el-color-danger);
+}
+</style>
 

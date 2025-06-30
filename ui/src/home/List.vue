@@ -23,7 +23,7 @@
                            @click="refCover?.show(item)"/>
                     </div>
                     <div style="flex-grow: 1;position: relative;">
-                      <div style="margin-left: 10px;">
+                      <div style="margin-left: 8px;">
                         <div class="flex">
                           <el-tooltip :content="item.title" placement="top">
                             <el-text line-clamp="1"
@@ -81,10 +81,14 @@
                           <el-tag type="danger" v-else>
                             tv
                           </el-tag>
-                          <el-tag v-if="item.backRssList.length > 0">
+                          <el-tag v-if="item.standbyRssList.length > 0">
                             备用RSS
                           </el-tag>
                         </div>
+                        <el-text v-if="item['lastDownloadTime'] && item.lastDownloadFormat" size="small"
+                                 type="info">
+                          {{ item.lastDownloadFormat }}
+                        </el-text>
                       </div>
                       <div
                           style="display: flex;align-items: flex-end;justify-content:flex-end; flex-direction: column;position: absolute;right: 0;bottom: 0;">
@@ -116,43 +120,20 @@
         <div style="height: 80px;"></div>
       </div>
     </el-scrollbar>
-    <el-affix position="bottom" :style="`width: ${width}px`">
-      <div style="width: 100%;
-                                                      background: linear-gradient(to bottom,rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.01) );
-                                                      backdrop-filter: blur(2px);padding-top: 10px;z-index: 99999"
-           id="page">
-        <div style="display: flex;justify-content: end;width: 100%;">
-          <div style="margin-right: 10px;margin-bottom: 10px;">
-            <popconfirm title="你确定要退出吗?" @confirm="logout">
-              <template #reference>
-                <el-button type="danger" bg text>
-                  <el-icon :class="elIconClass()">
-                    <Back/>
-                  </el-icon>
-                  <template v-if="isNotMobile()">
-                    退出登录
-                  </template>
-                </el-button>
-              </template>
-            </popconfirm>
-          </div>
-        </div>
-      </div>
-    </el-affix>
   </div>
 </template>
 
 <script setup>
 import {onMounted, ref} from "vue";
-import {Back, Delete, Edit as EditIcon, Files} from "@element-plus/icons-vue"
+import {Delete, Edit as EditIcon, Files} from "@element-plus/icons-vue"
 import Edit from "./Edit.vue";
-import api from "../api.js";
-import Popconfirm from "../other/Popconfirm.vue";
-import PlayList from "../play/PlayList.vue";
+import api from "@/js/api.js";
+import PlayList from "@/play/PlayList.vue";
 import Cover from "./Cover.vue";
 import Del from "./Del.vue";
 import {useWindowSize} from "@vueuse/core";
 import BgmRate from "./BgmRate.vue";
+import formatTime from "@/js/format-time.js";
 
 const defaultWeekList = [
   {
@@ -245,9 +226,16 @@ const getList = () => {
         } else {
           weekList.value = [{i: 1, label: ''}];
         }
+        let showLastDownloadTime = res.data['showLastDownloadTime']
         api.get('api/ani')
             .then(res => {
-              list.value = res.data
+              if (showLastDownloadTime) {
+                list.value = res.data.map(it => {
+                  return {...it, lastDownloadFormat: formatTime(it['lastDownloadTime'])}
+                })
+              } else {
+                list.value = res.data
+              }
               updateGridLayout()
             })
             .finally(() => {
@@ -281,11 +269,6 @@ onMounted(() => {
   window.addEventListener('resize', updateGridLayout);
   getList()
 })
-
-let logout = () => {
-  localStorage.removeItem('authorization')
-  location.reload()
-}
 
 let elIconClass = () => {
   return isNotMobile() ? 'el-icon--left' : '';
